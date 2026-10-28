@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#E9EEE8">
+<title>Plauderei</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<style>
+/* Layout: one column, phone-first; three screens (Gespräche, Neues Gespräch, Chat) swapped in place */
+:root{
+  --bg:#E9EEE8; --surface:#F7F9F5; --ink:#18241F; --muted:#5D6B64; --line:#CBD5CD;
+  --accent:#E3A008; --accent-ink:#2A1C00; --me:#1F4A3D; --me-ink:#F2F7F3; --note:#FFF3D1; --note-ink:#5A4300; --danger:#B3261E;
+  --display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#111A16; --surface:#19251F; --ink:#E5EEE8; --muted:#97A79E; --line:#2E3D35;
+  --accent:#F2B42B; --accent-ink:#231700; --me:#2F6B58; --me-ink:#F2F7F3; --note:#3A3015; --note-ink:#F6DE9E; --danger:#F2867E;
+  color-scheme:dark;
+}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 var(--body);-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* Die App füllt genau den sichtbaren Bereich – ohne Safari-Leisten und Tastatur (Höhe kommt per JS aus visualViewport) */
+.screen{position:fixed;left:0;right:0;top:var(--app-top,0px);height:100%;height:100dvh;height:var(--app-h,100dvh);
+  display:flex;flex-direction:column;max-width:640px;margin:0 auto;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.scroll{flex:1;overflow-y:auto;padding:20px max(16px,env(safe-area-inset-right,0px)) 28px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:22px}
+
+.brand{font-family:var(--display);font-weight:800;font-size:2.6rem;letter-spacing:-.03em;line-height:1;margin:0}
+.brand span{color:var(--accent)}
+.tag{color:var(--muted);margin:6px 0 0}
+h2{font-family:var(--display);font-weight:700;font-size:1.05rem;margin:0 0 10px;letter-spacing:-.01em}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;margin:0 0 8px}
+
+.btn{border:0;border-radius:14px;padding:14px 18px;font-weight:700;background:var(--accent);color:var(--accent-ink);font-family:var(--display);font-size:1.05rem}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn.small{padding:8px 12px;font-size:.9rem;border-radius:10px}
+.iconbtn{border:0;background:transparent;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--ink)}
+.iconbtn:hover{background:var(--surface)}
+.iconbtn svg{width:22px;height:22px}
+
+/* Gesprächsliste */
+.convs{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.conv{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:14px;padding:12px 12px 12px 14px;border:1px solid var(--line)}
+.conv button.open{flex:1;min-width:0;background:none;border:0;text-align:left;padding:0;display:flex;gap:12px;align-items:center}
+.code{font-family:var(--display);font-weight:800;font-size:.95rem;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--me);color:var(--me-ink);flex:none}
+.conv .t{font-weight:700;display:block}
+.conv .s{color:var(--muted);font-size:.88rem;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.empty{color:var(--muted);background:var(--surface);border:1.5px dashed var(--line);border-radius:14px;padding:18px}
+
+/* Auswahl-Chips */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:9px 14px;font-weight:700;font-size:.95rem}
+.chip small{font-weight:400;color:var(--muted);margin-left:4px}
+.chip[aria-pressed="true"]{background:var(--me);border-color:var(--me);color:var(--me-ink)}
+.chip[aria-pressed="true"] small{color:inherit;opacity:.8}
+
+.field{display:flex;flex-direction:column;gap:6px}
+.field input,.field select,.field textarea{width:100%;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:12px}
+.field textarea{min-height:170px;resize:vertical;font-size:.92rem;line-height:1.45}
+.hint{font-size:.85rem;color:var(--muted);margin:0}
+.hint code{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:0 4px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+details{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+details summary{font-weight:700;cursor:pointer}
+details[open] summary{margin-bottom:12px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.rate{display:flex;align-items:center;gap:10px}
+.rate input{flex:1;accent-color:var(--me)}
+.rate output{font-variant-numeric:tabular-nums;min-width:3.2em;text-align:right;color:var(--muted)}
+
+/* Chat */
+.bar{display:flex;align-items:center;gap:4px;padding:8px max(8px,env(safe-area-inset-right,0px)) 8px max(8px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line)}
+.bar .ttl{flex:1;min-width:0;padding:0 4px}
+.bar .ttl b{font-family:var(--display);font-size:1.1rem;display:block;line-height:1.2}
+.bar .ttl span{font-size:.82rem;color:var(--muted)}
+.iconbtn[aria-pressed="false"]{opacity:.45}
+.msgs{gap:14px}
+.msg{max-width:88%;display:flex;flex-direction:column;gap:6px}
+.msg.me{align-self:flex-end;align-items:flex-end}
+.bubble{padding:11px 15px;border-radius:18px;white-space:pre-wrap;word-wrap:break-word;font-size:1.05rem}
+.msg.ai .bubble{background:var(--surface);border:1px solid var(--line);border-bottom-left-radius:6px}
+.msg.me .bubble{background:var(--me);color:var(--me-ink);border-bottom-right-radius:6px}
+.fix{background:var(--note);color:var(--note-ink);border-radius:12px;padding:9px 13px;font-size:.92rem}
+.fix b{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em}
+.trans{color:var(--muted);font-style:italic;font-size:.95rem;padding:0 4px}
+.acts{display:flex;gap:4px}
+.acts button{border:0;background:none;color:var(--muted);font-size:.82rem;padding:4px 8px;border-radius:8px;font-weight:700}
+.acts button:hover{background:var(--surface);color:var(--ink)}
+.err{align-self:center;color:var(--danger);font-size:.92rem;text-align:center;max-width:90%}
+.typing{align-self:flex-start;display:flex;gap:5px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:18px}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:b 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,60%,100%{opacity:.3;transform:none}30%{opacity:1;transform:translateY(-3px)}}
+
+.composer{border-top:1px solid var(--line);padding:10px max(12px,env(safe-area-inset-right,0px)) 12px max(12px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:8px}
+.status{font-size:.82rem;color:var(--muted);text-align:center;min-height:1.2em}
+.compose{display:flex;gap:8px;align-items:flex-end}
+.compose textarea{flex:1;min-width:0;resize:none;max-height:120px;background:var(--surface);border:1.5px solid var(--line);border-radius:22px;padding:11px 16px;line-height:1.35}
+.mic{width:54px;height:54px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none}
+.mic svg{width:24px;height:24px}
+.mic.rec{background:var(--danger);color:#fff;animation:pulse 1.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--danger) 55%,transparent)}100%{box-shadow:0 0 0 16px transparent}}
+.send{width:46px;height:46px;border-radius:50%;border:1.5px solid var(--line);background:var(--surface);display:grid;place-items:center;flex:none}
+.send svg{width:20px;height:20px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+
+<!-- 1 · Gesprächsliste -->
+<section class="screen" id="home">
+  <div class="scroll">
+    <header>
+      <h1 class="brand">plauderei<span>.</span></h1>
+      <p class="tag">Sprechen üben mit Claude – per Stimme oder Tastatur.</p>
+    </header>
+    <button class="btn" id="newBtn">Neues Gespräch</button>
+    <div>
+      <h2>Deine Gespräche</h2>
+      <ul class="convs" id="convList"></ul>
+    </div>
+  </div>
+</section>
+
+<!-- 2 · Neues Gespräch -->
+<section class="screen" id="setup" hidden>
+  <div class="bar">
+    <button class="iconbtn" data-go="home" aria-label="Zurück"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div class="ttl"><b>Neues Gespräch</b></div>
+  </div>
+  <div class="scroll">
+    <div class="field">
+      <p class="label">Anthropic API-Key</p>
+      <input id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…">
+      <p class="hint">Bleibt nur in diesem Browser gespeichert und geht direkt an api.anthropic.com.</p>
+    </div>
+    <div><p class="label">Sprache</p><div class="chips" id="langChips"></div></div>
+    <div><p class="label">Thema</p><div class="chips" id="topicChips"></div></div>
+    <div><p class="label">Stil</p><div class="chips" id="styleChips"></div></div>
+
+    <details>
+      <summary>Stimme &amp; Modell</summary>
+      <div class="stack">
+        <div class="field"><p class="label">Sprachausgabe</p>
+          <div class="chips" id="engineChips">
+            <button class="chip" type="button" data-engine="device">Gerätestimme<small>kostenlos</small></button>
+            <button class="chip" type="button" data-engine="openai">OpenAI<small>natürlich, ca. 1,5 ct/Min.</small></button>
+          </div>
+        </div>
+        <div class="stack" id="openaiBox">
+          <div class="field"><p class="label">OpenAI API-Key</p>
+            <input id="ttsKey" type="password" autocomplete="off" placeholder="sk-…">
+            <p class="hint">Nur für die Stimme. Bleibt in diesem Browser und geht direkt an api.openai.com.</p>
+          </div>
+          <div class="field"><p class="label">OpenAI-Stimme</p>
+            <select id="ttsVoice">
+              <option value="marin">Marin – weiblich, sehr natürlich</option>
+              <option value="cedar">Cedar – männlich, sehr natürlich</option>
+              <option value="coral">Coral – weiblich, warm</option>
+              <option value="sage">Sage – weiblich, ruhig</option>
+              <option value="shimmer">Shimmer – weiblich, hell</option>
+              <option value="nova">Nova – weiblich, lebhaft</option>
+              <option value="ballad">Ballad – männlich, weich</option>
+              <option value="verse">Verse – männlich, ausdrucksstark</option>
+              <option value="ash">Ash – männlich, klar</option>
+              <option value="echo">Echo – männlich, ruhig</option>
+              <option value="onyx">Onyx – männlich, tief</option>
+              <option value="alloy">Alloy – neutral</option>
+              <option value="fable">Fable – männlich, erzählend</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" id="deviceBox"><p class="label">Gerätestimme</p><select id="voiceSel"></select>
+          <div class="row"><button class="btn ghost small" id="voiceReload" type="button">Stimmen neu laden</button></div>
+          <p class="hint" id="voiceInfo"></p>
+        </div>
+        <div class="row"><button class="btn ghost small" id="voiceTest" type="button">Probehören</button><span class="hint" id="testMsg"></span></div>
+        <div class="field"><p class="label">Sprechtempo</p>
+          <div class="rate"><input id="rate" type="range" min="0.6" max="1.3" step="0.05"><output id="rateOut"></output></div>
+        </div>
+        <div class="field"><p class="label">Modell</p>
+          <select id="modelSel">
+            <option value="claude-sonnet-5-5">Sonnet 5.5 – empfohlen ($2 / $10 pro Mio. Tokens)</option>
+            <option value="claude-haiku-5-5">Haiku 5.5 – am günstigsten ($0,10 / $0,50)</option>
+            <option value="claude-opus-5-5">Opus 5.5 – am stärksten ($4 / $20)</option>
+          </select>
+        </div>
+      </div>
+    </details>
+
+    <details id="promptBox">
+      <summary>Systemprompt anpassen</summary>
+      <div class="stack">
+        <div class="field"><textarea id="promptTxt" spellcheck="false"></textarea></div>
+        <p class="hint"><code>{{language}}</code> und <code>{{topic}}</code> werden beim Start ersetzt. Die Regel für Korrekturen hängt die App immer an.</p>
+        <div class="row">
+          <button class="btn ghost small" id="promptReset">Standard</button>
+          <button class="btn ghost small" id="promptSave">Für diesen Stil speichern</button>
+          <span class="hint" id="promptMsg"></span>
+        </div>
+      </div>
+    </details>
+
+    <button class="btn" id="startBtn">Gespräch starten</button>
+  </div>
+</section>
+
+<!-- 3 · Chat -->
+<section class="screen" id="chat" hidden>
+  <div class="bar">
+    <button class="iconbtn" data-go="home" aria-label="Zur Gesprächsliste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div class="ttl"><b id="chatTitle"></b><span id="chatSub"></span></div>
+    <button class="iconbtn" id="autoSpeak" aria-label="Antworten automatisch vorlesen" title="Automatisch vorlesen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg></button>
+    <button class="iconbtn" id="delBtn" aria-label="Gespräch löschen" title="Gespräch löschen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+  </div>
+  <div class="scroll msgs" id="msgs"></div>
+  <div class="composer">
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="compose">
+      <textarea id="input" rows="1" placeholder="Schreiben oder Mikrofon tippen…"></textarea>
+      <button class="send" id="sendBtn" aria-label="Senden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <button class="mic" id="micBtn" aria-label="Sprechen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ---------- Daten ---------- */
+const LANGS = {
+  es:{name:'Spanisch',  code:'es-ES', start:'Empezar'},
+  en:{name:'Englisch',  code:'en-GB', start:'Start'},
+  fr:{name:'Französisch',code:'fr-FR', start:'Commencer'},
+  it:{name:'Italienisch',code:'it-IT', start:'Iniziare'},
+  pt:{name:'Portugiesisch',code:'pt-BR', start:'Começar'},
+};
+const TOPICS = {
+  alltag:'Alltag', reisen:'Reisen', arbeit:'Arbeit', essen:'Essen & Kochen', hobbys:'Hobbys & Freizeit', frei:'Freies Gespräch'
+};
+const STYLES = {
+  b1:{name:'Lehrer', level:'B1', prompt:
+`Du bist ein geduldiger, freundlicher {{language}}-Lehrer. Ihr unterhaltet euch über das Thema „{{topic}}“ auf Niveau B1.
+Halte deine Antworten kurz (2–4 Sätze), damit der Lernende viel selbst spricht, und stelle am Ende fast immer eine Frage.
+Benutze gelegentlich nützliche neue Wörter und Wendungen.`},
+  partner:{name:'Gesprächspartner', level:'natürlich', prompt:
+`Du bist ein lockerer Muttersprachler und unterhältst dich ganz natürlich auf {{language}} über „{{topic}}“.
+Sprich wie ein Freund im Café: kurz, umgangssprachlich, neugierig. Erzähl auch mal etwas von dir.
+Korrigiere nur Fehler, die das Verständnis stören.`},
+  strict:{name:'Strenger Korrektor', level:'jeder Fehler', prompt:
+`Du bist ein genauer {{language}}-Lehrer. Ihr sprecht über „{{topic}}“.
+Korrigiere jeden Fehler in Grammatik, Wortwahl und Ausdruck, auch kleine. Antworte danach kurz (2–3 Sätze) inhaltlich und stelle eine Anschlussfrage.`},
+  a1:{name:'Anfänger', level:'A1', prompt:
+`Du bist ein sehr geduldiger {{language}}-Lehrer für absolute Anfänger (Niveau A1). Thema: „{{topic}}“.
+Benutze nur sehr einfache, kurze Sätze und Grundwortschatz im Präsens. Höchstens 2 Sätze pro Antwort und eine einfache Frage.`},
+  a2:{name:'Grundstufe', level:'A2', prompt:
+`Du bist ein geduldiger {{language}}-Lehrer für Lernende auf Niveau A2. Ihr unterhaltet euch über „{{topic}}“.
+Benutze einfache, klare Sätze und häufigen Alltagswortschatz. Neben dem Präsens darfst du die gebräuchliche Vergangenheitsform und einfache Zukunftsformen verwenden, aber keine komplizierten Nebensätze.
+Antworte mit 2–3 kurzen Sätzen und stelle am Ende eine einfache Frage. Wenn du ein seltenes Wort benutzt, erkläre es kurz in einfachen Worten der Zielsprache.`},
+};
+const FORMAT_RULE =
+`
+
+Format-Regeln (immer einhalten):
+- Schreibe deine Antwort ausschließlich auf {{language}}, ohne Markdown, ohne Emojis.
+- Wenn die letzte Nachricht des Lernenden Fehler enthält, die du korrigieren willst, füge nach deiner Antwort eine neue Zeile hinzu, die mit „Korrektur:“ beginnt. Darin: die richtige Fassung und eine sehr kurze Erklärung auf Deutsch. Sonst keine Korrektur-Zeile.
+- Bei der allerersten Nachricht begrüßt du den Lernenden kurz und eröffnest das Gespräch mit einer Frage zum Thema.`;
+
+/* ---------- Speicher ---------- */
+const load=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+let settings = Object.assign({key:'',model:'claude-sonnet-5-5',rate:0.95,voices:{},autoSpeak:true,prompts:{},lang:'es',topic:'alltag',style:'b1',engine:'device',ttsKey:'',ttsVoice:'marin'}, load('plauderei.settings',{}));
+let convs = load('plauderei.convs',[]);
+const saveSettings=()=>save('plauderei.settings',settings);
+const saveConvs=()=>save('plauderei.convs',convs);
+
+const $=s=>document.querySelector(s);
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- Navigation ---------- */
+function show(id){['home','setup','chat'].forEach(s=>$('#'+s).hidden=s!==id); if(id==='home'){stopAll();renderHome();}}
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>show(b.dataset.go));
+
+/* ---------- Startseite ---------- */
+function renderHome(){
+  const ul=$('#convList');
+  if(!convs.length){ul.innerHTML='<li class="empty">Noch keine Gespräche. Wähle oben „Neues Gespräch“, sprich los, und Claude antwortet in deiner Zielsprache – mit Korrekturen, wenn du Fehler machst.</li>';return;}
+  ul.innerHTML='';
+  [...convs].sort((a,b)=>b.updated-a.updated).forEach(c=>{
+    const last=[...c.messages].reverse().find(m=>!m.hidden);
+    const li=document.createElement('li');li.className='conv';
+    li.innerHTML=`<button class="open"><span class="code">${c.lang.toUpperCase()}</span><span style="min-width:0"><span class="t">${esc(LANGS[c.lang].name)} · ${esc(TOPICS[c.topic]||c.topic)}</span><span class="s">${last?esc(splitReply(last.content).text):'—'}</span></span></button><span class="hint">${new Date(c.updated).toLocaleDateString('de-DE',{day:'numeric',month:'short'})}</span>`;
+    li.querySelector('.open').onclick=()=>openConv(c.id);
+    ul.appendChild(li);
+  });
+}
+$('#newBtn').onclick=()=>{renderSetup();show('setup')};
+
+/* ---------- Setup ---------- */
+function chips(el,obj,key,label){
+  el.innerHTML='';
+  Object.entries(obj).forEach(([id,v])=>{
+    const b=document.createElement('button');b.className='chip';
+    b.innerHTML=label(v,id);b.setAttribute('aria-pressed',settings[key]===id);
+    b.onclick=()=>{settings[key]=id;saveSettings();renderSetup()};
+    el.appendChild(b);
+  });
+}
+function renderSetup(){
+  $('#apiKey').value=settings.key;
+  chips($('#langChips'),LANGS,'lang',v=>esc(v.name));
+  chips($('#topicChips'),TOPICS,'topic',v=>esc(v));
+  chips($('#styleChips'),STYLES,'style',v=>`${esc(v.name)}<small>${esc(v.level)}</small>`);
+  $('#promptTxt').value=settings.prompts[settings.style]||STYLES[settings.style].prompt;
+  $('#modelSel').value=settings.model;
+  $('#rate').value=settings.rate;$('#rateOut').value=settings.rate.toFixed(2)+'×';
+  $('#startBtn').textContent=LANGS[settings.lang].start+' →';
+  $('#ttsKey').value=settings.ttsKey;$('#ttsVoice').value=settings.ttsVoice;
+  renderEngine();
+  fillVoices();
+}
+function renderEngine(){
+  document.querySelectorAll('#engineChips .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.engine===settings.engine));
+  $('#openaiBox').hidden=settings.engine!=='openai';
+  $('#deviceBox').hidden=settings.engine!=='device';
+}
+document.querySelectorAll('#engineChips .chip').forEach(b=>b.onclick=()=>{settings.engine=b.dataset.engine;saveSettings();renderEngine()});
+$('#ttsKey').oninput=e=>{settings.ttsKey=e.target.value.trim();saveSettings()};
+$('#ttsVoice').onchange=e=>{settings.ttsVoice=e.target.value;saveSettings();audioCache.clear();$('#voiceTest').click()};
+$('#apiKey').oninput=e=>{settings.key=e.target.value.trim();saveSettings()};
+$('#modelSel').onchange=e=>{settings.model=e.target.value;saveSettings()};
+$('#rate').oninput=e=>{settings.rate=+e.target.value;$('#rateOut').value=settings.rate.toFixed(2)+'×';saveSettings()};
+$('#promptReset').onclick=()=>{delete settings.prompts[settings.style];saveSettings();$('#promptTxt').value=STYLES[settings.style].prompt;flash('Standard wiederhergestellt')};
+$('#promptSave').onclick=()=>{settings.prompts[settings.style]=$('#promptTxt').value;saveSettings();flash('Gespeichert')};
+function flash(t){$('#promptMsg').textContent=t;setTimeout(()=>$('#promptMsg').textContent='',1800)}
+
+/* ---------- Stimmen ---------- */
+const synth=window.speechSynthesis;
+/* Hochwertige Stimmen (Premium/Erweitert/Natural/Neural) zuerst, Spaßstimmen von Apple ans Ende */
+const GOOD=/premium|enhanced|erweitert|natural|neural|online/i;
+const NOVELTY=/\b(albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley)\b/i;
+const voiceScore=v=>(GOOD.test(v.name)?0:v.localService===false?1:2)+(NOVELTY.test(v.name)?10:0);
+function voicesFor(lang){
+  if(!synth)return [];
+  return synth.getVoices().filter(v=>v.lang.replace('_','-').toLowerCase().startsWith(lang))
+    .sort((a,b)=>voiceScore(a)-voiceScore(b)||a.name.localeCompare(b.name));
+}
+function pickVoice(lang){
+  const vs=voicesFor(lang);
+  return vs.find(v=>v.voiceURI===settings.voices[lang])||vs[0]||null;
+}
+function fillVoices(){
+  const sel=$('#voiceSel'),info=$('#voiceInfo'),vs=voicesFor(settings.lang),name=LANGS[settings.lang].name;
+  if(!synth){sel.innerHTML='<option>Vorlesen wird von diesem Browser nicht unterstützt</option>';info.textContent='';return}
+  if(!vs.length){
+    sel.innerHTML='<option value="">Standardstimme des Geräts</option>';
+    info.textContent=`Dein Browser meldet noch keine ${name}-Stimmen. Tippe auf „Stimmen neu laden“. Hilft das nicht, schließe den Browser komplett und öffne die App neu.`;
+    return;
+  }
+  sel.innerHTML=vs.map(v=>`<option value="${esc(v.voiceURI)}">${esc(v.name)}${GOOD.test(v.name)?' ★':''} (${esc(v.lang)})</option>`).join('');
+  sel.value=pickVoice(settings.lang).voiceURI;
+  info.textContent=`${vs.length} ${name}-Stimme${vs.length>1?'n':''} gefunden. ★ = hochwertige Stimme. Fehlt eine gerade geladene Stimme, schließe den Browser komplett und öffne die App neu.`;
+}
+$('#voiceSel').onchange=e=>{settings.voices[settings.lang]=e.target.value;saveSettings();speak(LANGS[settings.lang].start+'!',settings.lang)};
+$('#voiceTest').onclick=()=>speak({es:'Hola, ¿qué tal? Vamos a charlar un poco.',en:'Hi there! Shall we have a little chat?',fr:'Bonjour ! On discute un peu ?',it:'Ciao! Facciamo due chiacchiere?',pt:'Olá! Vamos conversar um pouco?'}[settings.lang],settings.lang);
+function notify(t){
+  if(!$('#chat').hidden)setStatus(t);
+  else{$('#testMsg').textContent=t;}
+}
+$('#voiceReload').onclick=()=>{
+  $('#voiceInfo').textContent='Suche Stimmen…';
+  // Safari liefert neue Stimmen oft erst nach einer kurzen Sprachausgabe
+  try{const u=new SpeechSynthesisUtterance(' ');u.volume=0;synth.speak(u)}catch{}
+  setTimeout(fillVoices,400);setTimeout(fillVoices,1500);
+};
+if(synth){
+  synth.onvoiceschanged=()=>{if(!$('#setup').hidden)fillVoices()};
+  // Manche Browser füllen die Liste verzögert und ohne Ereignis
+  [300,1000,2500].forEach(t=>setTimeout(()=>{if(!$('#setup').hidden)fillVoices()},t));
+}
+
+/* ---------- OpenAI-Stimme ---------- */
+const player=new Audio();player.preload='auto';
+const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+let audioUnlocked=false;
+// iOS spielt Audio nur ab, wenn das Element einmal durch eine Berührung gestartet wurde
+document.addEventListener('pointerdown',()=>{
+  if(audioUnlocked)return;audioUnlocked=true;
+  player.src=SILENT;player.play().catch(()=>{audioUnlocked=false});
+},true);
+const audioCache=new Map();
+const ACCENT={es:'Spanish with a natural accent from Spain',en:'British English',fr:'French with a natural accent from France',it:'Italian with a natural accent from Italy',pt:'Brazilian Portuguese'};
+let ttsAbort=null;
+async function openaiSpeak(text,lang){
+  const key=settings.ttsVoice+'|'+lang+'|'+text;
+  let url=audioCache.get(key);
+  if(!url){
+    ttsAbort=new AbortController();
+    const r=await fetch('https://api.openai.com/v1/audio/speech',{
+      method:'POST',signal:ttsAbort.signal,
+      headers:{'content-type':'application/json','authorization':'Bearer '+settings.ttsKey},
+      body:JSON.stringify({model:'gpt-4o-mini-tts',voice:settings.ttsVoice,input:text,response_format:'mp3',
+        instructions:`Speak ${ACCENT[lang]} as a native speaker. You are a warm, friendly language teacher talking to a learner: articulate clearly, use natural intonation, keep a relaxed conversational pace.`})
+    });
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      if(r.status===401)throw new Error('Der OpenAI-Key wurde abgelehnt.');
+      if(r.status===429)throw new Error('OpenAI: kein Guthaben oder zu viele Anfragen.');
+      throw new Error('OpenAI-Fehler ('+r.status+'): '+(d?.error?.message||r.statusText));
+    }
+    url=URL.createObjectURL(await r.blob());
+    audioCache.set(key,url);
+    if(audioCache.size>40){const [k,u]=audioCache.entries().next().value;URL.revokeObjectURL(u);audioCache.delete(k)}
+  }
+  player.src=url;
+  player.preservesPitch=true;player.defaultPlaybackRate=settings.rate;player.playbackRate=settings.rate;
+  await player.play();
+}
+function stopSpeech(){
+  if(synth)synth.cancel();
+  if(ttsAbort){ttsAbort.abort();ttsAbort=null}
+  if(!player.paused)player.pause();
+}
+async function speak(text,lang){
+  if(!text)return;
+  stopSpeech();
+  if(settings.engine==='openai'){
+    if(!settings.ttsKey){notify('Kein OpenAI-Key eingetragen – ich nutze die Gerätestimme.');return deviceSpeak(text,lang)}
+    try{notify('Stimme wird geladen…');await openaiSpeak(text,lang);notify('');}
+    catch(e){
+      if(e.name==='AbortError')return;
+      if(e.name==='NotAllowedError'){notify('Tippe auf „Vorlesen“, um die Antwort zu hören.');return}
+      notify(e.message+' Ich nutze die Gerätestimme.');deviceSpeak(text,lang);
+    }
+    return;
+  }
+  deviceSpeak(text,lang);
+}
+function deviceSpeak(text,lang){
+  if(!synth)return;
+  synth.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang=LANGS[lang].code;u.rate=settings.rate;
+  const v=pickVoice(lang);if(v)u.voice=v;
+  synth.speak(u);
+}
+
+/* ---------- Claude API ---------- */
+async function callClaude({system,messages,model,max=700}){
+  if(!settings.key)throw new Error('Bitte zuerst deinen API-Key eintragen (Neues Gespräch → API-Key).');
+  const r=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'content-type':'application/json','x-api-key':settings.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model,max_tokens:max,system,messages})
+  });
+  const data=await r.json().catch(()=>({}));
+  if(!r.ok){
+    const m=data?.error?.message||r.statusText;
+    if(r.status===401)throw new Error('Der API-Key wurde abgelehnt. Prüfe ihn unter „Neues Gespräch“.');
+    if(r.status===429)throw new Error('Zu viele Anfragen oder kein Guthaben mehr. Kurz warten oder Guthaben in der Claude Console aufladen.');
+    throw new Error('Claude-Fehler ('+r.status+'): '+m);
+  }
+  return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
+}
+function splitReply(t){
+  const lines=t.split('\n'),text=[],fix=[];let inFix=false;
+  for(const l of lines){ if(/^\s*Korrektur:/i.test(l)){inFix=true;fix.push(l.replace(/^\s*Korrektur:\s*/i,''));} else (inFix?fix:text).push(l); }
+  return {text:text.join('\n').trim(),fix:fix.join('\n').trim()};
+}
+function systemFor(c){
+  const fill=s=>s.replaceAll('{{language}}',LANGS[c.lang].name).replaceAll('{{topic}}',TOPICS[c.topic]||c.topic);
+  return fill(c.prompt+FORMAT_RULE);
+}
+function apiMessages(c){
+  const out=[];
+  for(const m of c.messages){
+    const last=out[out.length-1];
+    if(last&&last.role===m.role)last.content+='\n\n'+m.content; else out.push({role:m.role,content:m.content});
+  }
+  return out;
+}
+
+/* ---------- Chat ---------- */
+let cur=null,busy=false;
+$('#startBtn').onclick=()=>{
+  if(!settings.key){$('#apiKey').focus();$('#apiKey').placeholder='Ohne API-Key geht es nicht – sk-ant-…';return}
+  const prompt=$('#promptTxt').value.trim()||STYLES[settings.style].prompt;
+  const c={id:Date.now().toString(36),lang:settings.lang,topic:settings.topic,style:settings.style,model:settings.model,prompt,
+    messages:[{role:'user',content:'(Bitte beginne das Gespräch.)',hidden:true}],updated:Date.now()};
+  convs.push(c);saveConvs();openConv(c.id,true);
+};
+function openConv(id,fresh){
+  cur=convs.find(c=>c.id===id);
+  $('#chatTitle').textContent=LANGS[cur.lang].name+' · '+(TOPICS[cur.topic]||cur.topic);
+  $('#chatSub').textContent=STYLES[cur.style]?.name+' · '+cur.model.replace('claude-','').replace(/-(\d)-(\d)/,' $1.$2');
+  $('#autoSpeak').setAttribute('aria-pressed',settings.autoSpeak);
+  show('chat');renderMsgs();
+  const last=cur.messages[cur.messages.length-1];
+  if(fresh||last.role==='user')reply();
+}
+function renderMsgs(){
+  const box=$('#msgs');box.innerHTML='';
+  cur.messages.forEach((m,i)=>{
+    if(m.hidden)return;
+    const d=document.createElement('div');d.className='msg '+(m.role==='user'?'me':'ai');
+    if(m.role==='user'){d.innerHTML=`<div class="bubble">${esc(m.content)}</div>`}
+    else{
+      const {text,fix}=splitReply(m.content);
+      d.innerHTML=`<div class="bubble">${esc(text)}</div>`+
+        (fix?`<div class="fix"><b>Korrektur</b>${esc(fix)}</div>`:'')+
+        (m.trans?`<div class="trans">${esc(m.trans)}</div>`:'')+
+        `<div class="acts"><button data-a="say">Vorlesen</button>${m.trans?'':'<button data-a="tr">Übersetzen</button>'}</div>`;
+      d.querySelector('[data-a=say]').onclick=()=>speak(text,cur.lang);
+      const tr=d.querySelector('[data-a=tr]');if(tr)tr.onclick=()=>translate(i,tr);
+    }
+    box.appendChild(d);
+  });
+  if(busy)box.insertAdjacentHTML('beforeend','<div class="typing" aria-label="Claude schreibt"><i></i><i></i><i></i></div>');
+  if(cur.error)box.insertAdjacentHTML('beforeend',`<p class="err">${esc(cur.error)}</p>`);
+  box.scrollTop=box.scrollHeight;
+}
+async function reply(){
+  busy=true;cur.error='';setStatus('Claude denkt nach…');renderMsgs();
+  try{
+    const t=await callClaude({system:systemFor(cur),messages:apiMessages(cur),model:cur.model});
+    cur.messages.push({role:'assistant',content:t});cur.updated=Date.now();saveConvs();
+    busy=false;setStatus('');renderMsgs();
+    if(settings.autoSpeak)speak(splitReply(t).text,cur.lang);
+  }catch(e){busy=false;cur.error=e.message;setStatus('');renderMsgs()}
+}
+async function translate(i,btn){
+  btn.textContent='Übersetze…';btn.disabled=true;
+  try{
+    const t=await callClaude({model:'claude-haiku-5-5',max:400,system:'Übersetze den Text ins Deutsche. Gib nur die Übersetzung aus.',messages:[{role:'user',content:splitReply(cur.messages[i].content).text}]});
+    cur.messages[i].trans=t;saveConvs();renderMsgs();
+  }catch(e){btn.textContent='Fehler – nochmal';btn.disabled=false}
+}
+function send(){
+  const v=$('#input').value.trim();
+  if(!v||busy)return;
+  $('#input').value='';grow();
+  stopAll();
+  cur.messages.push({role:'user',content:v});cur.updated=Date.now();saveConvs();
+  reply();
+}
+$('#sendBtn').onclick=send;
+$('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
+const grow=()=>{const t=$('#input');t.style.height='auto';t.style.height=Math.min(t.scrollHeight,120)+'px'};
+$('#input').addEventListener('input',grow);
+$('#autoSpeak').onclick=e=>{settings.autoSpeak=!settings.autoSpeak;saveSettings();e.currentTarget.setAttribute('aria-pressed',settings.autoSpeak);if(!settings.autoSpeak)stopSpeech()};
+let delArmed=false;
+$('#delBtn').onclick=()=>{
+  if(!delArmed){delArmed=true;setStatus('Nochmal tippen zum Löschen');setTimeout(()=>{delArmed=false;if($('#status').textContent.startsWith('Nochmal'))setStatus('')},2500);return}
+  convs=convs.filter(c=>c.id!==cur.id);saveConvs();delArmed=false;show('home');
+};
+function setStatus(t){$('#status').textContent=t}
+
+/* ---------- Spracherkennung ---------- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,recOn=false,finalText='';
+if(!SR){$('#micBtn').hidden=true;$('#input').placeholder='Schreiben… (Spracheingabe: Chrome oder Safari nutzen)'}
+$('#micBtn').onclick=()=>{
+  if(recOn){rec.stop();return}
+  if(busy)return;
+  stopSpeech();
+  rec=new SR();rec.lang=LANGS[cur.lang].code;rec.interimResults=true;rec.continuous=false;
+  finalText='';
+  rec.onstart=()=>{recOn=true;$('#micBtn').classList.add('rec');setStatus('Ich höre zu – sprich '+LANGS[cur.lang].name+'…')};
+  rec.onresult=e=>{
+    let interim='';finalText='';
+    for(const r of e.results){ if(r.isFinal)finalText+=r[0].transcript; else interim+=r[0].transcript; }
+    $('#input').value=(finalText+interim).trim();grow();
+  };
+  rec.onerror=e=>{setStatus(e.error==='not-allowed'?'Mikrofon-Zugriff verweigert – in den Browser-Einstellungen erlauben.':e.error==='no-speech'?'Nichts gehört. Nochmal versuchen.':'Spracherkennung: '+e.error)};
+  rec.onend=()=>{recOn=false;$('#micBtn').classList.remove('rec');if(!$('#status').textContent.startsWith('Ich höre'))return;setStatus('');if($('#input').value.trim())send()};
+  try{rec.start()}catch{}
+};
+function stopAll(){stopSpeech();if(recOn&&rec){rec.onend=null;rec.abort();recOn=false;$('#micBtn').classList.remove('rec')}}
+
+/* ---------- Sichtbare Höhe (iPad/iPhone: Safari-Leisten und Tastatur) ---------- */
+function fitViewport(){
+  const vv=window.visualViewport,root=document.documentElement.style;
+  const h=vv?vv.height:window.innerHeight,top=vv?vv.offsetTop:0;
+  root.setProperty('--app-h',Math.round(h)+'px');
+  root.setProperty('--app-top',Math.round(top)+'px');
+  const m=$('#msgs');if(m&&!$('#chat').hidden&&document.activeElement===$('#input'))m.scrollTop=m.scrollHeight;
+}
+if(window.visualViewport){visualViewport.addEventListener('resize',fitViewport);visualViewport.addEventListener('scroll',fitViewport)}
+window.addEventListener('resize',fitViewport);
+window.addEventListener('orientationchange',()=>setTimeout(fitViewport,300));
+$('#input').addEventListener('focus',()=>setTimeout(fitViewport,350));
+$('#input').addEventListener('blur',()=>setTimeout(()=>{window.scrollTo(0,0);fitViewport()},100));
+fitViewport();
+
+renderHome();
+</script>
+</body>
+</html>
